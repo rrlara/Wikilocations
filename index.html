@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Wikipedia Location Search</title>
+    <link rel="stylesheet" type="text/css" href="style.css?v=4">
+    <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.min.css">
+  </head>
+  <body>
+    <div class="input-container">
+      <h2>Enter a Location</h2>
+      <form>
+        <label for="location-input">Location:</label>
+        <input type="text" id="location-input" name="location-input" required>
+        <button type="submit" id="submit-button">Submit</button>
+      </form>
+    </div>
+
+    <div class="output-container">
+      <div id="map"></div>
+      <h2>Articles related to your location:</h2>
+      <ul id="articles-list"></ul>
+    </div>
+
+    <div class="article-sheet" id="article-sheet" aria-hidden="true">
+      <div class="article-sheet__backdrop" data-close-article></div>
+      <section class="article-sheet__panel" aria-labelledby="article-sheet-title">
+        <header class="article-sheet__header">
+          <h2 id="article-sheet-title">Wikipedia</h2>
+          <div class="article-sheet__actions">
+            <a id="article-sheet-open" href="#" target="_blank" rel="noopener">Open</a>
+            <button type="button" data-close-article aria-label="Close article">Close</button>
+          </div>
+        </header>
+        <article id="article-content" class="article-content" aria-live="polite"></article>
+      </section>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.min.js"></script>
+    <script src="script.js?v=4"></script>
+  </body>
+</html>
