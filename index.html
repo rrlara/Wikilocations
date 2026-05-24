@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Wikipedia Location Search</title>
-    <link rel="stylesheet" type="text/css" href="style.css?v=4">
+    <link rel="stylesheet" type="text/css" href="style.css?v=6">
     <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.min.css">
   </head>
   <body>
@@ -12,7 +12,24 @@
       <h2>Enter a Location</h2>
       <form>
         <label for="location-input">Location:</label>
-        <input type="text" id="location-input" name="location-input" required>
+        <div class="location-field">
+          <input
+            type="text"
+            id="location-input"
+            name="location-input"
+            autocomplete="off"
+            aria-autocomplete="list"
+            aria-controls="location-suggestions"
+            aria-expanded="false"
+            required
+          >
+          <ul
+            id="location-suggestions"
+            class="location-suggestions"
+            role="listbox"
+            hidden
+          ></ul>
+        </div>
         <button type="submit" id="submit-button">Submit</button>
       </form>
     </div>
@@ -38,6 +55,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.min.js"></script>
-    <script src="script.js?v=4"></script>
+    <script src="script.js?v=6"></script>
   </body>
 </html>

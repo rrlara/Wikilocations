@@ -1,6 +1,7 @@
 document.addEventListener("DOMContentLoaded", function () {
   const form = document.querySelector("form");
   const locationInput = document.getElementById("location-input");
+  const locationSuggestions = document.getElementById("location-suggestions");
   const articlesList = document.getElementById("articles-list");
   const articleSheet = document.getElementById("article-sheet");
   const articleSheetTitle = document.getElementById("article-sheet-title");
@@ -9,6 +10,12 @@ document.addEventListener("DOMContentLoaded", function () {
   let map;
   let articleMarkers = L.layerGroup();
   let activeArticleRequest = 0;
+  let searchHereButton;
+  let suppressNextMovePrompt = false;
+  let suggestionAbortController;
+  let suggestionTimer;
+  let currentSuggestions = [];
+  let highlightedSuggestionIndex = -1;
 
   form.addEventListener("submit", function (event) {
     event.preventDefault();
@@ -18,8 +25,184 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     articlesList.innerHTML = "<li>Searching...</li>";
+    hideLocationSuggestions();
     geocodeLocation(location);
   });
+
+  locationInput.addEventListener("input", function () {
+    queueLocationSuggestions(locationInput.value.trim());
+  });
+
+  locationInput.addEventListener("keydown", function (event) {
+    if (locationSuggestions.hidden || currentSuggestions.length === 0) {
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setHighlightedSuggestion(highlightedSuggestionIndex + 1);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setHighlightedSuggestion(highlightedSuggestionIndex - 1);
+    } else if (event.key === "Enter" && highlightedSuggestionIndex >= 0) {
+      event.preventDefault();
+      selectLocationSuggestion(currentSuggestions[highlightedSuggestionIndex]);
+    } else if (event.key === "Escape") {
+      hideLocationSuggestions();
+    }
+  });
+
+  document.addEventListener("click", function (event) {
+    if (!event.target.closest(".location-field")) {
+      hideLocationSuggestions();
+    }
+  });
+
+  function queueLocationSuggestions(query) {
+    clearTimeout(suggestionTimer);
+
+    if (query.length < 2) {
+      abortSuggestionRequest();
+      hideLocationSuggestions();
+      return;
+    }
+
+    renderLocationSuggestionStatus("Searching...");
+    suggestionTimer = setTimeout(() => fetchLocationSuggestions(query), 250);
+  }
+
+  function fetchLocationSuggestions(query) {
+    abortSuggestionRequest();
+    suggestionAbortController = new AbortController();
+
+    const url = new URL("https://photon.komoot.io/api/");
+    url.search = new URLSearchParams({
+      q: query,
+      limit: "6",
+    });
+
+    fetch(url, { signal: suggestionAbortController.signal })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("Unable to load suggestions.");
+        }
+
+        return response.json();
+      })
+      .then((data) => {
+        if (locationInput.value.trim() !== query) {
+          return;
+        }
+
+        renderLocationSuggestions(
+          (data.features || []).map((feature) => ({
+            display_name: formatPhotonSuggestion(feature.properties),
+            lat: feature.geometry.coordinates[1],
+            lon: feature.geometry.coordinates[0],
+          })).filter((suggestion) => suggestion.display_name)
+        );
+      })
+      .catch((error) => {
+        if (error.name !== "AbortError") {
+          renderLocationSuggestionStatus("Suggestions unavailable");
+        }
+      });
+  }
+
+  function formatPhotonSuggestion(properties) {
+    return [
+      properties.name,
+      properties.city,
+      properties.county,
+      properties.state,
+      properties.country,
+    ]
+      .filter(Boolean)
+      .filter((value, index, values) => values.indexOf(value) === index)
+      .join(", ");
+  }
+
+  function renderLocationSuggestionStatus(message) {
+    currentSuggestions = [];
+    highlightedSuggestionIndex = -1;
+    locationSuggestions.replaceChildren();
+
+    const item = document.createElement("li");
+    item.className = "location-suggestion-status";
+    item.textContent = message;
+    locationSuggestions.appendChild(item);
+    locationSuggestions.hidden = false;
+    locationInput.setAttribute("aria-expanded", "true");
+  }
+
+  function renderLocationSuggestions(suggestions) {
+    currentSuggestions = suggestions;
+    highlightedSuggestionIndex = -1;
+    locationSuggestions.replaceChildren();
+
+    if (suggestions.length === 0) {
+      renderLocationSuggestionStatus("No matches found");
+      return;
+    }
+
+    suggestions.forEach((suggestion, index) => {
+      const item = document.createElement("li");
+      const button = document.createElement("button");
+
+      item.role = "option";
+      item.id = `location-suggestion-${index}`;
+      button.type = "button";
+      button.textContent = suggestion.display_name;
+      button.addEventListener("click", function () {
+        selectLocationSuggestion(suggestion);
+      });
+
+      item.appendChild(button);
+      locationSuggestions.appendChild(item);
+    });
+
+    locationSuggestions.hidden = false;
+    locationInput.setAttribute("aria-expanded", "true");
+  }
+
+  function setHighlightedSuggestion(nextIndex) {
+    highlightedSuggestionIndex =
+      (nextIndex + currentSuggestions.length) % currentSuggestions.length;
+
+    locationSuggestions.querySelectorAll("li").forEach((item, index) => {
+      const isHighlighted = index === highlightedSuggestionIndex;
+
+      item.setAttribute("aria-selected", String(isHighlighted));
+      item.classList.toggle("is-highlighted", isHighlighted);
+    });
+    locationInput.setAttribute(
+      "aria-activedescendant",
+      `location-suggestion-${highlightedSuggestionIndex}`
+    );
+  }
+
+  function selectLocationSuggestion(suggestion) {
+    locationInput.value = suggestion.display_name;
+    hideLocationSuggestions();
+    articlesList.innerHTML = "<li>Searching...</li>";
+    getArticles(suggestion.lat, suggestion.lon, { updateMapView: true });
+  }
+
+  function hideLocationSuggestions() {
+    currentSuggestions = [];
+    highlightedSuggestionIndex = -1;
+    locationSuggestions.hidden = true;
+    locationSuggestions.replaceChildren();
+    locationInput.setAttribute("aria-expanded", "false");
+    locationInput.removeAttribute("aria-activedescendant");
+  }
+
+  function abortSuggestionRequest() {
+    if (suggestionAbortController) {
+      suggestionAbortController.abort();
+      suggestionAbortController = null;
+    }
+  }
 
   function geocodeLocation(location) {
     const url = new URL("https://nominatim.openstreetmap.org/search");
@@ -41,7 +224,7 @@ document.addEventListener("DOMContentLoaded", function () {
         if (data.length > 0) {
           const lat = data[0].lat;
           const lon = data[0].lon;
-          getArticles(lat, lon);
+          getArticles(lat, lon, { updateMapView: true });
         } else {
           articlesList.innerHTML = "<li>Location not found</li>";
         }
@@ -51,7 +234,8 @@ document.addEventListener("DOMContentLoaded", function () {
       });
   }
 
-  function getArticles(lat, lon) {
+  function getArticles(lat, lon, options = {}) {
+    const updateMapView = options.updateMapView !== false;
     const url = new URL("https://en.wikipedia.org/w/api.php");
     url.search = new URLSearchParams({
       action: "query",
@@ -72,7 +256,8 @@ document.addEventListener("DOMContentLoaded", function () {
       })
       .then((data) => {
         articlesList.innerHTML = "";
-        renderMap(lat, lon);
+        renderMap(lat, lon, { updateMapView });
+        hideSearchHereButton();
 
         if (
           data.query &&
@@ -100,7 +285,8 @@ document.addEventListener("DOMContentLoaded", function () {
       });
   }
 
-  function renderMap(lat, lon) {
+  function renderMap(lat, lon, options = {}) {
+    const updateMapView = options.updateMapView !== false;
     const coords = [Number(lat), Number(lon)];
 
     if (!map) {
@@ -111,12 +297,82 @@ document.addEventListener("DOMContentLoaded", function () {
         maxZoom: 18,
       }).addTo(map);
       articleMarkers.addTo(map);
+      addSearchHereControl();
+      map.on("moveend", handleMapMoveEnd);
     } else {
-      map.setView(coords, 13);
+      if (updateMapView) {
+        const nextCenter = L.latLng(coords);
+        const shouldMove =
+          !map.getCenter().equals(nextCenter, 0.000001) || map.getZoom() !== 13;
+
+        if (shouldMove) {
+          suppressNextMovePrompt = true;
+          map.setView(coords, 13);
+        }
+      }
+
       articleMarkers.clearLayers();
     }
 
     L.marker(coords).addTo(articleMarkers);
+  }
+
+  function addSearchHereControl() {
+    const searchHereControl = L.control({ position: "topright" });
+
+    searchHereControl.onAdd = function () {
+      const container = L.DomUtil.create(
+        "div",
+        "leaflet-bar search-here-control"
+      );
+      searchHereButton = L.DomUtil.create(
+        "button",
+        "search-here-button",
+        container
+      );
+
+      searchHereButton.type = "button";
+      searchHereButton.textContent = "Search here";
+      searchHereButton.hidden = true;
+      L.DomEvent.disableClickPropagation(container);
+      L.DomEvent.on(searchHereButton, "click", searchCurrentMapView);
+
+      return container;
+    };
+
+    searchHereControl.addTo(map);
+  }
+
+  function handleMapMoveEnd() {
+    if (suppressNextMovePrompt) {
+      suppressNextMovePrompt = false;
+      return;
+    }
+
+    showSearchHereButton();
+  }
+
+  function showSearchHereButton() {
+    if (searchHereButton) {
+      searchHereButton.hidden = false;
+    }
+  }
+
+  function hideSearchHereButton() {
+    if (searchHereButton) {
+      searchHereButton.hidden = true;
+      searchHereButton.disabled = false;
+      searchHereButton.textContent = "Search here";
+    }
+  }
+
+  function searchCurrentMapView() {
+    const center = map.getCenter();
+
+    searchHereButton.disabled = true;
+    searchHereButton.textContent = "Searching...";
+    articlesList.innerHTML = "<li>Searching this map area...</li>";
+    getArticles(center.lat, center.lng, { updateMapView: false });
   }
 
   function addMapPin(lat, lon, title) {
