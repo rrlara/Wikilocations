@@ -3,10 +3,24 @@ document.addEventListener("DOMContentLoaded", function () {
   const locationInput = document.getElementById("location-input");
   const locationSuggestions = document.getElementById("location-suggestions");
   const articlesList = document.getElementById("articles-list");
+  const resultsHeading = document.getElementById("results-heading");
+  const resultsSummary = document.getElementById("results-summary");
   const articleSheet = document.getElementById("article-sheet");
   const articleSheetTitle = document.getElementById("article-sheet-title");
   const articleSheetOpen = document.getElementById("article-sheet-open");
   const articleContent = document.getElementById("article-content");
+  const centerMarkerIcon = L.divIcon({
+    className: "",
+    html: '<div class="map-pin map-pin--center"></div>',
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+  });
+  const articleMarkerIcon = L.divIcon({
+    className: "",
+    html: '<div class="map-pin"></div>',
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+  });
   let map;
   let articleMarkers = L.layerGroup();
   let activeArticleRequest = 0;
@@ -17,6 +31,8 @@ document.addEventListener("DOMContentLoaded", function () {
   let currentSuggestions = [];
   let highlightedSuggestionIndex = -1;
 
+  initializeMap([39.5, -98.35], 4);
+
   form.addEventListener("submit", function (event) {
     event.preventDefault();
     const location = locationInput.value.trim();
@@ -24,7 +40,7 @@ document.addEventListener("DOMContentLoaded", function () {
       return;
     }
 
-    articlesList.innerHTML = "<li>Searching...</li>";
+    setListStatus("Searching for this place...");
     hideLocationSuggestions();
     geocodeLocation(location);
   });
@@ -184,8 +200,11 @@ document.addEventListener("DOMContentLoaded", function () {
   function selectLocationSuggestion(suggestion) {
     locationInput.value = suggestion.display_name;
     hideLocationSuggestions();
-    articlesList.innerHTML = "<li>Searching...</li>";
-    getArticles(suggestion.lat, suggestion.lon, { updateMapView: true });
+    setListStatus("Searching for nearby articles...");
+    getArticles(suggestion.lat, suggestion.lon, {
+      updateMapView: true,
+      label: suggestion.display_name,
+    });
   }
 
   function hideLocationSuggestions() {
@@ -224,18 +243,30 @@ document.addEventListener("DOMContentLoaded", function () {
         if (data.length > 0) {
           const lat = data[0].lat;
           const lon = data[0].lon;
-          getArticles(lat, lon, { updateMapView: true });
+          getArticles(lat, lon, {
+            updateMapView: true,
+            label: data[0].display_name || location,
+          });
         } else {
-          articlesList.innerHTML = "<li>Location not found</li>";
+          setListStatus(
+            "Location not found",
+            "No place found",
+            "Try a more specific city, landmark, or address."
+          );
         }
       })
       .catch((error) => {
-        articlesList.innerHTML = `<li>${error.message}</li>`;
+        setListStatus(
+          error.message,
+          "Search unavailable",
+          "The location service did not return a result."
+        );
       });
   }
 
   function getArticles(lat, lon, options = {}) {
     const updateMapView = options.updateMapView !== false;
+    const label = options.label || "this map center";
     const url = new URL("https://en.wikipedia.org/w/api.php");
     url.search = new URLSearchParams({
       action: "query",
@@ -255,7 +286,6 @@ document.addEventListener("DOMContentLoaded", function () {
         return response.json();
       })
       .then((data) => {
-        articlesList.innerHTML = "";
         renderMap(lat, lon, { updateMapView });
         hideSearchHereButton();
 
@@ -264,25 +294,94 @@ document.addEventListener("DOMContentLoaded", function () {
           data.query.geosearch &&
           data.query.geosearch.length > 0
         ) {
-          data.query.geosearch.forEach((item) => {
-            const listItem = document.createElement("li");
-            const link = document.createElement("a");
-            link.href = getWikipediaUrl(item.title);
-            link.dataset.articleTitle = item.title;
-            link.textContent = item.title;
-            listItem.appendChild(link);
-            articlesList.appendChild(listItem);
+          const articles = data.query.geosearch;
+
+          updateResultsHeader(
+            `${articles.length} nearby articles`,
+            `Within 10 km of ${label}.`
+          );
+          articlesList.replaceChildren();
+          articles.forEach((item, index) => {
+            articlesList.appendChild(renderArticleCard(item, index));
             addMapPin(item.lat, item.lon, item.title);
           });
         } else {
-          const listItem = document.createElement("li");
-          listItem.textContent = "No articles found";
-          articlesList.appendChild(listItem);
+          setListStatus(
+            "No Wikipedia articles found nearby.",
+            "No nearby articles",
+            `No geotagged articles were returned within 10 km of ${label}.`
+          );
         }
       })
       .catch((error) => {
-        articlesList.innerHTML = `<li>${error.message}</li>`;
+        setListStatus(
+          error.message,
+          "Articles unavailable",
+          "Wikipedia did not return nearby results."
+        );
       });
+  }
+
+  function updateResultsHeader(heading, summary) {
+    document.body.classList.add("has-results");
+    resultsHeading.textContent = heading;
+    resultsSummary.textContent = summary;
+  }
+
+  function setListStatus(
+    message,
+    heading = "Searching nearby",
+    summary = "Looking for geotagged Wikipedia articles."
+  ) {
+    const listItem = document.createElement("li");
+
+    listItem.className = "list-status";
+    listItem.textContent = message;
+    updateResultsHeader(heading, summary);
+    articlesList.replaceChildren(listItem);
+  }
+
+  function renderArticleCard(item, index) {
+    const listItem = document.createElement("li");
+    const link = document.createElement("a");
+    const meta = document.createElement("div");
+    const distance = document.createElement("span");
+    const position = document.createElement("span");
+    const button = document.createElement("button");
+
+    listItem.className = "article-card";
+    listItem.dataset.articleTitle = item.title;
+    link.className = "article-card__title";
+    link.href = getWikipediaUrl(item.title);
+    link.dataset.articleTitle = item.title;
+    link.textContent = item.title;
+
+    meta.className = "article-card__meta";
+    distance.textContent = formatDistance(item.dist);
+    position.textContent = `#${index + 1}`;
+    meta.append(distance, position);
+
+    button.type = "button";
+    button.className = "article-card__button";
+    button.dataset.articleTitle = item.title;
+    button.textContent = "Read article";
+
+    listItem.append(link, meta, button);
+    return listItem;
+  }
+
+  function formatDistance(distanceInMeters) {
+    const meters = Number(distanceInMeters);
+
+    if (!Number.isFinite(meters)) {
+      return "Nearby";
+    }
+
+    if (meters < 1000) {
+      return `${Math.round(meters)} m away`;
+    }
+
+    return `${(meters / 1000).toFixed(meters < 10000 ? 1 : 0)} km away`;
   }
 
   function renderMap(lat, lon, options = {}) {
@@ -290,15 +389,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const coords = [Number(lat), Number(lon)];
 
     if (!map) {
-      map = L.map("map").setView(coords, 13);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution:
-          'Map data © <a href="https://openstreetmap.org">OpenStreetMap</a> contributors',
-        maxZoom: 18,
-      }).addTo(map);
-      articleMarkers.addTo(map);
-      addSearchHereControl();
-      map.on("moveend", handleMapMoveEnd);
+      initializeMap(coords, 13);
     } else {
       if (updateMapView) {
         const nextCenter = L.latLng(coords);
@@ -314,7 +405,25 @@ document.addEventListener("DOMContentLoaded", function () {
       articleMarkers.clearLayers();
     }
 
-    L.marker(coords).addTo(articleMarkers);
+    L.marker(coords, {
+      icon: centerMarkerIcon,
+      title: "Search center",
+    }).addTo(articleMarkers);
+  }
+
+  function initializeMap(coords, zoom) {
+    map = L.map("map", {
+      zoomControl: false,
+    }).setView(coords, zoom);
+    L.control.zoom({ position: "bottomright" }).addTo(map);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution:
+        'Map data © <a href="https://openstreetmap.org">OpenStreetMap</a> contributors',
+      maxZoom: 18,
+    }).addTo(map);
+    articleMarkers.addTo(map);
+    addSearchHereControl();
+    map.on("moveend", handleMapMoveEnd);
   }
 
   function addSearchHereControl() {
@@ -371,8 +480,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
     searchHereButton.disabled = true;
     searchHereButton.textContent = "Searching...";
-    articlesList.innerHTML = "<li>Searching this map area...</li>";
-    getArticles(center.lat, center.lng, { updateMapView: false });
+    setListStatus("Searching this map area...");
+    getArticles(center.lat, center.lng, {
+      updateMapView: false,
+      label: "the current map center",
+    });
   }
 
   function addMapPin(lat, lon, title) {
@@ -389,7 +501,10 @@ document.addEventListener("DOMContentLoaded", function () {
     popupContent.appendChild(popupTitle);
     popupContent.appendChild(viewButton);
 
-    L.marker([Number(lat), Number(lon)])
+    L.marker([Number(lat), Number(lon)], {
+      icon: articleMarkerIcon,
+      title,
+    })
       .bindPopup(popupContent)
       .addTo(articleMarkers);
   }

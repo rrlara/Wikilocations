@@ -3,42 +3,55 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Wikipedia Location Search</title>
-    <link rel="stylesheet" type="text/css" href="style.css?v=6">
+    <title>Wikilocations</title>
     <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.min.css">
+    <link rel="stylesheet" type="text/css" href="style.css?v=7">
   </head>
   <body>
-    <div class="input-container">
-      <h2>Enter a Location</h2>
-      <form>
-        <label for="location-input">Location:</label>
-        <div class="location-field">
-          <input
-            type="text"
-            id="location-input"
-            name="location-input"
-            autocomplete="off"
-            aria-autocomplete="list"
-            aria-controls="location-suggestions"
-            aria-expanded="false"
-            required
-          >
-          <ul
-            id="location-suggestions"
-            class="location-suggestions"
-            role="listbox"
-            hidden
-          ></ul>
-        </div>
-        <button type="submit" id="submit-button">Submit</button>
-      </form>
-    </div>
+    <main class="app-shell">
+      <section class="map-stage" aria-label="Wikipedia location map">
+        <div id="map"></div>
 
-    <div class="output-container">
-      <div id="map"></div>
-      <h2>Articles related to your location:</h2>
-      <ul id="articles-list"></ul>
-    </div>
+        <div class="input-container">
+          <div class="brand-block">
+            <p class="app-kicker">Wikilocations</p>
+            <h1>Explore Wikipedia by place</h1>
+          </div>
+          <form class="search-form">
+            <label class="sr-only" for="location-input">Location</label>
+            <div class="location-field">
+              <input
+                type="text"
+                id="location-input"
+                name="location-input"
+                autocomplete="off"
+                aria-autocomplete="list"
+                aria-controls="location-suggestions"
+                aria-expanded="false"
+                placeholder="Search a city, landmark, or address"
+                required
+              >
+              <ul
+                id="location-suggestions"
+                class="location-suggestions"
+                role="listbox"
+                hidden
+              ></ul>
+            </div>
+            <button type="submit" id="submit-button">Search</button>
+          </form>
+        </div>
+
+        <section class="output-container" aria-labelledby="results-heading">
+          <header class="results-header">
+            <p class="results-kicker">Nearby articles</p>
+            <h2 id="results-heading">Search a place to begin</h2>
+            <p id="results-summary">Readable Wikipedia results will appear here with matching map pins.</p>
+          </header>
+          <ul id="articles-list"></ul>
+        </section>
+      </section>
+    </main>
 
     <div class="article-sheet" id="article-sheet" aria-hidden="true">
       <div class="article-sheet__backdrop" data-close-article></div>
@@ -55,6 +68,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.min.js"></script>
-    <script src="script.js?v=6"></script>
+    <script src="script.js?v=7"></script>
   </body>
 </html>
